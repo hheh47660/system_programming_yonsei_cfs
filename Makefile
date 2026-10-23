@@ -7,5 +7,10 @@ default:
 	$(MAKE) -C $(KDIR) M=$(PWD) modules
 	rmmod $(target)
 	insmod $(target).ko
+git:
+	git pull
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
+	rmmod $(target)
+	insmod $(target).ko
 clean:
 	rm -rf *.ko *.mod *.mod.* .*.cmd *.o *.symvers *.order

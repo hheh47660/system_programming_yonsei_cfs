@@ -15,36 +15,6 @@
 MODULE_AUTHOR("Simone, Rea");
 MODULE_LICENSE("GPL");
 
-/* FAIR processes have policy NORMAL, BATCH or IDLE */
-static bool is_fair(struct task_struct *p)
-{
-    return p->policy == SCHED_NORMAL ||
-           p->policy == SCHED_BATCH  ||
-           p->policy == SCHED_IDLE;
-}
-
-
-static int count_fair(struct seq_file *s)
-{
-    struct task_struct *g, *p;
-    unsigned int fair_total = 0;
-
-    /* Need to get the lock when reading the list */
-    rcu_read_lock();
-    for_each_process_thread(g, p) {
-
-        if (!is_fair(p)){
-            continue;
-	}
-	/* I need to check that the task is actually on the runqueue and not in the waiting queue 
-	 * and the task must not be the this process itself */
-        if (p->on_rq && p->pid != current->pid)             
-            fair_total++;
-    }
-    rcu_read_unlock();
-
-    return fair_total;
-}
 
 static void print_line(struct seq_file *s){
     int i = 0;
@@ -77,6 +47,81 @@ static void hello_seq_stop(struct seq_file *s, void *v)
     // nothing to do
 }
 
+/* FAIR processes have policy NORMAL, BATCH or IDLE */
+static bool is_fair(struct task_struct *p)
+{
+    return p->policy == SCHED_NORMAL ||
+           p->policy == SCHED_BATCH  ||
+           p->policy == SCHED_IDLE;
+}
+
+
+static int count_fair(struct seq_file *s)
+{
+    struct task_struct *g, *p;
+    unsigned int fair_total = 0;
+
+    /* Need to get the lock when reading the list */
+    rcu_read_lock();
+    for_each_process_thread(g, p) {
+
+        if (!is_fair(p)){
+            continue;
+	}
+	/* I need to check that the task is actually on the runqueue and not in the waiting queue 
+	 * and the task must not be the this process itself */
+        if (p->on_rq && p != current)             
+            fair_total++;
+    }
+    rcu_read_unlock();
+
+    return fair_total;
+}
+
+/* Same as count_fair but we only consider tasks on (int *cpu) */
+static int count_fair_on_cpu(int cpu)
+{
+    struct task_struct *g, *p;
+    unsigned int fair_total = 0;
+
+    rcu_read_lock();
+    for_each_process_thread(g, p) {
+
+        if (!is_fair(p)){
+            continue;
+	}
+
+	/* We check by comparing CPU value in p 
+	 * I'm considering also the calling proc */
+        if (p->on_rq && p->cpu == cpu)             
+            fair_total++;
+    }
+    rcu_read_unlock();
+
+    return fair_total;
+}
+
+struct _rb_tree_node{
+	int
+} rb_tree_node;
+
+static int print_rb_tree_informations(struct seq_file *s)
+{
+    int cpu;
+    unsigned int queued_fair_tasks_in_cpu;
+
+    for_each_online_cpu(cpu){
+        queued_fair_tasks_in_cpu = count_fair_on_cpu(cpu);
+	
+        seq_printf(s, "[CPU #%d] %d tasks\n", cpu, queued_fair_tasks_in_cpu);
+
+	reverse_the_tree();
+      	
+    	print_line(s);
+    }
+    return 0;
+}
+
 static int hello_seq_show(struct seq_file *s, void *v)
 {
     loff_t *spos = (loff_t *) v;
@@ -90,6 +135,9 @@ static int hello_seq_show(struct seq_file *s, void *v)
     seq_printf(s, "Number of queued FAIR tasks: %d\n", (int) queued_fair_tasks_count);
 
     print_line(s);
+    
+    print_rb_tree_informations(s);
+
     return 0;
 }
 
