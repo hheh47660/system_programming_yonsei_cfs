@@ -6,6 +6,8 @@
 #include <linux/sched/signal.h>   // for_each_process_thread
 #include <linux/rcupdate.h>
 #include <linux/rbtree.h>         // everything related to black tree
+#include <linux/rbtree_augmented.h>
+
 
 #define PROC_NAME "hw1"
 #define STUDENT_ID "2026848368"
@@ -90,7 +92,7 @@ static int count_fair_on_cpu(int cpu)
 
 	/* We check by comparing CPU value in p */
 	/* We also check that the task is actually in the tree with RB_EMPTY_NODE */
-        if (p->on_rq && p->cpu == cpu && p != current && !p->on_cpu)             
+        if (p->on_rq && task_cpu(p) == cpu && p != current && !p->on_cpu)             
             fair_total++;
     }
 
@@ -109,7 +111,7 @@ static struct task_struct* pick_a_fair_from_cpu(int cpu)
 
 	/* We check by comparing CPU value in p 
 	 * I want the process to have run_node defined */
-        if (p->on_rq && p->cpu == cpu && !p->on_cpu){
+        if (p->on_rq && task_cpu(p) == cpu  && !p->on_cpu){
             return p;
 	}
     }
@@ -127,18 +129,52 @@ static struct rb_root get_root(struct rb_node *node){
     return root;
 }
 
-static void print_information_of_rb_node(struct seq_file *s, struct rb_node *node){
+
+static bool get_position(struct rb_node *n, char *buf, size_t len)
+{
+    char rev[64];
+    int depth = 0, i;
+
+    while (rb_parent(n)) {
+        struct rb_node *par = rb_parent(n);
+
+        if (depth >= (int)sizeof(rev))
+            return false;                  
+        if (par->rb_left == n)
+            rev[depth++] = 'L';
+        else if (par->rb_right == n)
+            rev[depth++] = 'R';
+        else
+            return false;                 
+        n = par;
+    }
+
+    if ((size_t)depth + 2 > len)
+        return false;
+
+    buf[0] = 'O';
+    for (i = 0; i < depth; i++)
+        buf[1 + i] = rev[depth - 1 - i];
+    buf[1 + depth] = '\0';
+    return true;
+}
+
+static void print_information_of_rb_node(struct seq_file *s, struct rb_node *node, struct rb_root *root ){
 	struct sched_entity *se;
 	struct sched_dl_entity *dl;
 	struct task_struct *t;
-	unsigned long color = node->__rb_parent_color;
+	char pos[66];
 
 	se = rb_entry(node, struct sched_entity, run_node);
 	t  = container_of(se, struct task_struct, se);
 	dl = &(t->dl);
 
-        seq_printf(s, "%lld %lld %d ", dl->deadline, se->vruntime, t->pid);
-        seq_printf(s, "%lld \n", color);
+	if (!get_position(node, pos, sizeof(pos)))
+	    strcpy(pos, "Error");
+
+	seq_printf(s, "%llu %llu %d %s %s\n",
+			se->deadline, se->vruntime, t->pid,
+			rb_is_red(node) ? "Red" : "Black", pos);
 
 	
 	return;
@@ -161,7 +197,7 @@ static void reverse_the_tree(struct seq_file *s, int cpu){
 	random_node = &random_task->se.run_node;
 	root = get_root(random_node);
 	for(curr = rb_first(&root); curr; curr = rb_next(curr))
-		print_information_of_rb_node(s, curr);
+		print_information_of_rb_node(s, curr, &root);
 	
 	
 
