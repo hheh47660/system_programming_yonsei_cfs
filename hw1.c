@@ -99,6 +99,7 @@ static int count_fair_on_cpu(int cpu)
     return fair_total;
 }
 
+/* Pick a random FAIR task in cpu's runqueue */
 static struct task_struct* pick_a_fair_from_cpu(int cpu)
 {
     struct task_struct *g, *p;
@@ -109,8 +110,8 @@ static struct task_struct* pick_a_fair_from_cpu(int cpu)
             continue;
 	}
 
-	/* We check by comparing CPU value in p 
-	 * I want the process to have run_node defined */
+		/* We check by comparing CPU value in p 
+		and we also check it is not the current running process*/
         if (p->on_rq && task_cpu(p) == cpu  && !p->on_cpu){
             return p;
 	}
@@ -129,7 +130,7 @@ static struct rb_root get_root(struct rb_node *node){
     return root;
 }
 
-
+/* Return the position of a node in the rb_tree with L,R,O alphabet */
 static bool get_position(struct rb_node *n, char *buf, size_t len)
 {
     char rev[64];
@@ -159,6 +160,7 @@ static bool get_position(struct rb_node *n, char *buf, size_t len)
     return true;
 }
 
+/* Print informations for the specified node */
 static void print_information_of_rb_node(struct seq_file *s, struct rb_node *node, struct rb_root *root ){
 	struct sched_entity *se;
 	struct sched_dl_entity *dl;
@@ -167,7 +169,6 @@ static void print_information_of_rb_node(struct seq_file *s, struct rb_node *nod
 
 	se = rb_entry(node, struct sched_entity, run_node);
 	t  = container_of(se, struct task_struct, se);
-	dl = &(t->dl);
 
 	if (!get_position(node, pos, sizeof(pos)))
 	    strcpy(pos, "Error");
@@ -214,13 +215,14 @@ static int print_rb_tree_informations(struct seq_file *s)
 	
         seq_printf(s, "[CPU #%d] %d tasks\n", cpu, queued_fair_tasks_in_cpu);
 
-	reverse_the_tree(s, cpu);
+		reverse_the_tree(s, cpu);
       	
     	print_line(s);
     }
     return 0;
 }
 
+/* Excuted when the proc/ file is read. This is the starting point */
 static int hello_seq_show(struct seq_file *s, void *v)
 {
     int queued_fair_tasks_count;
